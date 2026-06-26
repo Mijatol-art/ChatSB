@@ -1,2 +1,10 @@
+# Xóa bỏ các phiên bản cố định cũ, để nó tự tìm bản mới nhất
 selfcord.py
 python-dotenv
+aiohttp>=3.11.0
+aioconsole
+websockets>=13.0
+ujson
+aiofiles
+requests
+uvloop>=0.21.0
