@@ -5,18 +5,11 @@ import random
 import logging
 import sys
 import json
-
-# Use uvloop for faster event loop if available (Linux only)
-try:
-    import uvloop
-    uvloop.install()
-except ImportError:
-    pass
 from conversations import SCENARIOS
 
-# --- CẤU HÌNH ---
+# --- CAU HINH ---
 LOG_FILE = "system_health.log"
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)])
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger("StarrySystem")
 
 TOKENS = [t.strip() for t in os.getenv("TOKEN", "").split(",") if t.strip()]
@@ -29,6 +22,19 @@ MEMBER_NAMES = ["Kikuri", "Nijika", "PA-san", "Ryo", "Kita", "Seika", "Hitori", 
 def log_critical(msg): logger.error(f"[!!! CRITICAL !!!] {msg}")
 def log_safe(msg): logger.debug(f"[IGNORE] {msg}")
 
+# --- HEALTH CHECK SERVER (required by Railway to mark service as "running") ---
+async def health_server():
+    port = int(os.getenv("PORT", 8080))
+    async def handle(reader, writer):
+        await reader.read(1024)
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+        await writer.drain()
+        writer.close()
+    server = await asyncio.start_server(handle, "0.0.0.0", port)
+    logger.info(f"Health check server listening on port {port}")
+    async with server:
+        await server.serve_forever()
+
 class BotManager:
     def __init__(self, session):
         self.session = session
@@ -37,16 +43,13 @@ class BotManager:
         self.pause_event.set()
         self.starry_token = TOKENS[-1]
 
-    # --- ĐIỀU KHIỂN & RPC (TEAM STARRY) ---
     async def control_hub(self):
         ws_url = "wss://gateway.discord.gg/?v=10&encoding=json"
         while True:
             try:
                 async with self.session.ws_connect(ws_url) as ws:
-                    # Đăng nhập & Set RPC Starry Bar™
-                    await ws.send_json({"op": 2, "d": {"token": self.starry_token, "capabilities": 16381, "properties": {"os": "Linux", "browser": "Chrome", "device": "Starry Bar™"}}})
-                    await ws.send_json({"op": 3, "d": {"since": 0, "activities": [{"name": "Starry Bar™", "type": 0, "details": "Managing System", "state": "Running Live"}], "status": "online", "afk": False}})
-                    
+                    await ws.send_json({"op": 2, "d": {"token": self.starry_token, "capabilities": 16381, "properties": {"os": "Linux", "browser": "Chrome", "device": "Starry Bar"}}})
+                    await ws.send_json({"op": 3, "d": {"since": 0, "activities": [{"name": "Starry Bar", "type": 0, "details": "Managing System", "state": "Running Live"}], "status": "online", "afk": False}})
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             data = json.loads(msg.data)
@@ -59,12 +62,11 @@ class BotManager:
                                     elif cmd == "!logs":
                                         with open(LOG_FILE, "r") as f:
                                             crit = [l for l in f.readlines() if "[!!! CRITICAL !!!]" in l][-10:]
-                                            await self.session.post(f"{API}/channels/{msg_data['channel_id']}/messages", headers={"Authorization": self.starry_token}, json={"content": f"🛡️ BÁO CÁO:\n```\n{''.join(crit)}```"})
+                                            await self.session.post(f"{API}/channels/{msg_data[\"channel_id\"]}/messages", headers={"Authorization": self.starry_token}, json={"content": f"B�O C�O:\n```\n{\"\"  .join(crit)}```"})
             except Exception as e:
-                log_critical(f"Gateway ngắt: {e}")
+                log_critical(f"Gateway ngat: {e}")
                 await asyncio.sleep(10)
 
-    # --- VẬN HÀNH KỊCH BẢN ---
     async def scenario_runner(self):
         while True:
             for scenario in SCENARIOS:
@@ -76,12 +78,9 @@ class BotManager:
                     await asyncio.sleep(random.uniform(12, 18))
             await asyncio.sleep(60)
 
-    # --- BOT WORKER ---
     async def bot_worker(self, name, token):
-        # Join voice 1 lần duy nhất
         try: await self.session.patch(f"{API}/channels/{VOICE_CHANNEL_ID}/voice-states/@me", headers={"Authorization": token}, json={"channel_id": VOICE_CHANNEL_ID, "self_mute": True})
         except: pass
-        
         while True:
             try:
                 await self.pause_event.wait()
@@ -91,10 +90,10 @@ class BotManager:
                     await asyncio.sleep(len(payload.get("content", "")) / 5 + 1.5)
                     async with self.session.post(f"{API}/channels/{CHANNEL_ID}/messages", headers={"Authorization": token}, json={"content": payload["content"]}) as resp:
                         if resp.status == 429: await asyncio.sleep(30)
-                        elif resp.status >= 400: log_critical(f"Lỗi gửi từ {name}: {resp.status}")
+                        elif resp.status >= 400: log_critical(f"Loi gui tu {name}: {resp.status}")
                 self.queue.task_done()
             except Exception as e:
-                log_safe(f"Lỗi worker {name}: {e}")
+                log_safe(f"Loi worker {name}: {e}")
                 await asyncio.sleep(5)
 
 async def main():
@@ -104,7 +103,9 @@ async def main():
         tasks = [asyncio.create_task(sys_manager.bot_worker(MEMBER_NAMES[i], TOKENS[i])) for i in range(len(TOKENS))]
         tasks.append(asyncio.create_task(sys_manager.scenario_runner()))
         tasks.append(asyncio.create_task(sys_manager.control_hub()))
+        tasks.append(asyncio.create_task(health_server()))
         await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
