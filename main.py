@@ -67,7 +67,7 @@ class BotManager:
                                         await self.session.post(
                                             f"{API}/channels/{msg_data['channel_id']}/messages",
                                             headers={"Authorization": self.starry_token},
-                                            json={"content": f"BAO CAO:\n\\\\n{report}\\\"}
+                                            json={"content": f"BAO CAO:\n{report}"}
                                         )
             except Exception as e:
                 log_critical(f"Gateway ngat: {e}")
