@@ -23,7 +23,7 @@ MEMBER_NAMES = ["Kikuri", "Nijika", "PA-san", "Ryo", "Kita", "Seika", "Hitori", 
 def log_critical(msg): logger.error(f"[!!! CRITICAL !!!] {msg}")
 def log_safe(msg): logger.debug(f"[IGNORE] {msg}")
 
-# --- HEALTH CHECK SERVER (required by Railway to mark service as running) ---
+# --- HEALTH CHECK SERVER ---
 async def health_server():
     port = int(os.getenv("PORT", 8080))
     async def handle(reader, writer):
@@ -50,7 +50,6 @@ class BotManager:
             try:
                 async with self.session.ws_connect(ws_url) as ws:
                     await ws.send_json({"op": 2, "d": {"token": self.starry_token, "capabilities": 16381, "properties": {"os": "Linux", "browser": "Chrome", "device": "Starry Bar"}}})
-                    await ws.send_json({"op": 3, "d": {"since": 0, "activities": [{"name": "Starry Bar", "type": 0, "details": "Managing System", "state": "Running Live"}], "status": "online", "afk": False}})
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             data = json.loads(msg.data)
@@ -73,20 +72,15 @@ class BotManager:
                 log_critical(f"Gateway ngat: {e}")
                 await asyncio.sleep(10)
 
-async def scenario_runner(self):
+    async def scenario_runner(self):
         while True:
             for scenario in SCENARIOS:
                 for speaker, content in scenario:
                     await self.pause_event.wait()
-                    # Payload ngẫu nhiên cho bot
                     payload = {"content": "https://media.tenor.com/gdojpTc0GOMAAAAi/bocchi-the-rock-btr.gif" if random.random() < 0.25 else content}
-                    
-                    # Bỏ await self.queue.join() ở đây!
                     await self.queue.put((speaker, payload))
-                    
-                    # Giảm delay xuống để bot bắt nhịp nhanh hơn
-                    await asyncio.sleep(random.uniform(5, 8)) 
-            await asyncio.sleep(30)
+                    await asyncio.sleep(random.uniform(5, 8))
+            await asyncio.sleep(60)
 
     async def bot_worker(self, name, token):
         try: await self.session.patch(f"{API}/channels/{VOICE_CHANNEL_ID}/voice-states/@me", headers={"Authorization": token}, json={"channel_id": VOICE_CHANNEL_ID, "self_mute": True})
@@ -97,10 +91,9 @@ async def scenario_runner(self):
                 speaker, payload = await self.queue.get()
                 if speaker == name:
                     await self.session.post(f"{API}/channels/{CHANNEL_ID}/typing", headers={"Authorization": token})
-                    await asyncio.sleep(len(payload.get("content", "")) / 5 + 1.5)
+                    await asyncio.sleep(1.5)
                     async with self.session.post(f"{API}/channels/{CHANNEL_ID}/messages", headers={"Authorization": token}, json={"content": payload["content"]}) as resp:
                         if resp.status == 429: await asyncio.sleep(30)
-                        elif resp.status >= 400: log_critical(f"Loi gui tu {name}: {resp.status}")
                 self.queue.task_done()
             except Exception as e:
                 log_safe(f"Loi worker {name}: {e}")
