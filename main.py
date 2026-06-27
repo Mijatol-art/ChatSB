@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import aiohttp
 import os
@@ -22,7 +23,7 @@ MEMBER_NAMES = ["Kikuri", "Nijika", "PA-san", "Ryo", "Kita", "Seika", "Hitori", 
 def log_critical(msg): logger.error(f"[!!! CRITICAL !!!] {msg}")
 def log_safe(msg): logger.debug(f"[IGNORE] {msg}")
 
-# --- HEALTH CHECK SERVER (required by Railway to mark service as "running") ---
+# --- HEALTH CHECK SERVER (required by Railway to mark service as running) ---
 async def health_server():
     port = int(os.getenv("PORT", 8080))
     async def handle(reader, writer):
@@ -62,7 +63,12 @@ class BotManager:
                                     elif cmd == "!logs":
                                         with open(LOG_FILE, "r") as f:
                                             crit = [l for l in f.readlines() if "[!!! CRITICAL !!!]" in l][-10:]
-                                            await self.session.post(f"{API}/channels/{msg_data[\"channel_id\"]}/messages", headers={"Authorization": self.starry_token}, json={"content": f"BÁO CÁO:\n```\n{\"\"  .join(crit)}```"})
+                                        report = "".join(crit)
+                                        await self.session.post(
+                                            f"{API}/channels/{msg_data['channel_id']}/messages",
+                                            headers={"Authorization": self.starry_token},
+                                            json={"content": f"BAO CAO:\n\\\\n{report}\\\"}
+                                        )
             except Exception as e:
                 log_critical(f"Gateway ngat: {e}")
                 await asyncio.sleep(10)
@@ -108,4 +114,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
