@@ -1,19 +1,24 @@
-# Sử dụng Python 3.10 vì đây là phiên bản ổn định nhất cho selfcord.py
+# Python 3.10-slim: most stable for aiohttp + uvloop wheel availability
 FROM python:3.10-slim
 
-# Cài đặt các thư viện hệ thống cần thiết để biên dịch code C
-RUN apt-get update && apt-get install -y \
+# System build deps needed for C extensions (ujson, uvloop, frozenlist, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Nâng cấp pip và cài đặt setuptools trước để tránh lỗi metadata
-RUN pip install --upgrade pip setuptools wheel
+# Upgrade pip toolchain first to avoid legacy metadata errors
+RUN pip install --upgrade --no-cache-dir pip setuptools wheel
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
+# Install dependencies separately from code (better layer caching)
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+
+# Copy application source
 COPY . .
-CMD ["python", "main.py"]
+
+CMD ["python", "-u", "main.py"]
+

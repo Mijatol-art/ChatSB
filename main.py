@@ -5,6 +5,13 @@ import random
 import logging
 import sys
 import json
+
+# Use uvloop for faster event loop if available (Linux only)
+try:
+    import uvloop
+    uvloop.install()
+except ImportError:
+    pass
 from conversations import SCENARIOS
 
 # --- CẤU HÌNH ---
